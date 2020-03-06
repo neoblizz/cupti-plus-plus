@@ -1,18 +1,21 @@
-#include "../includes/cuptipp.hxx"
+#include <cuptipp.hxx>
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 
-__global__ void vectoradd(size_t n, int* a, int* b, int* c) {
+#define ITERATIONS 2000
+
+__global__ void vectoradd(size_t n, int* a, int* b, int* c) 
+{
 	int index = threadIdx.x + blockIdx.x * blockDim.x;
 	if (index < n) {
 		c[index] = a[index] + b[index];
 	}
 }
 
-int main(void) {
-
-	int N = 1 << 20;
+int main(int argc, char *argv[])
+{
+	int N = 1 << 19;
 	thrust::host_vector<int> A(N);
 	thrust::host_vector<int> B(N);
 	thrust::host_vector<int> C(N);
@@ -25,11 +28,19 @@ int main(void) {
 
 	thrust::device_vector<int> a = A;
 	thrust::device_vector<int> b = B;
-	thrust::device_vector<int> c(N); 
+	thrust::device_vector<int> c(N);
+
+	pthread_t thread;
+	cuptipp::profile::begin<pthread_t>(&thread);
 
 	int blockDim = 128;
 	int gridDim = (N + blockDim - 1) / blockDim;
-	vectoradd <<< gridDim, blockDim >>> (N, a.data().get(), b.data().get(), c.data().get());
+	for (int i = 0; i < ITERATIONS; i++) {
+		vectoradd <<< gridDim, blockDim >>> 
+			(N, a.data().get(), b.data().get(), c.data().get());
+	}
+
+	cuptipp::profile::end(&thread);
 
 	int errors = 0;
 	for (int i = 0; i < N; i++) {
