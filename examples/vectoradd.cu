@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 			(N, a.data().get(), b.data().get(), c.data().get());
 	}
 
-	cuptipp::profile::end(&thread);
+	cuptipp::profile::end<pthread_t>(&thread);
 
 	int errors = 0;
 	for (int i = 0; i < N; i++) {
