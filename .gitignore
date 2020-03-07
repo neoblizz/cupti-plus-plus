@@ -1,3 +1,9 @@
+# Binary files
+# Ignore all files, except the ones with extension.
+*
+!/**/
+!*.*
+
 # Prerequisites
 *.d
 
@@ -30,3 +36,11 @@
 *.exe
 *.out
 *.app
+
+# CUDA
+*.i
+*.ii
+*.gpu
+*.ptx
+*.cubin
+*.fatbin
