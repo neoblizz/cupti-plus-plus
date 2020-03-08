@@ -3,9 +3,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 
-#define ITERATIONS 2000
-
-__global__ void vectoradd(size_t n, int* a, int* b, int* c) 
+__global__ void vectorAdd(size_t n, int* a, int* b, int* c) 
 {
 	int index = threadIdx.x + blockIdx.x * blockDim.x;
 	if (index < n) {
@@ -35,10 +33,10 @@ int main(int argc, char *argv[])
 
 	int blockDim = 128;
 	int gridDim = (N + blockDim - 1) / blockDim;
-	for (int i = 0; i < ITERATIONS; i++) {
-		vectoradd <<< gridDim, blockDim >>> 
-			(N, a.data().get(), b.data().get(), c.data().get());
-	}
+
+	cuptipp::launch<cuptipp::LaunchT::PROFILED>(
+		vectorAdd, {gridDim, blockDim}, 
+		N, a.data().get(), b.data().get(), c.data().get());
 
 	cuptipp::profile::end<pthread_t>(&thread);
 

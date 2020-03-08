@@ -42,8 +42,46 @@
 
 #define EVENT_NAME "l2_subp0_read_sector_misses"
 #define SAMPLE_PERIOD_MS 50
+#define ITERATIONS 2000
 
 namespace cuptipp {
+
+enum LaunchT {
+  PROFILED,
+  NORMAL
+};
+
+typedef struct {
+  dim3 blocks_per_grid;
+  dim3 threads_per_block;
+  size_t dynamic_shared_memory_size;
+} ConfigsT;
+
+template<LaunchT L, typename KernelT, typename... ParametersT>
+inline void launch(
+	const KernelT& kernel_function, ConfigsT launch_configs, ParametersT... parameters)
+{
+  // Perform a PROFILED cuptipp::launch
+  if (L == LaunchT::PROFILED) {
+    for (int i = 0; i < ITERATIONS; i++) {
+    kernel_function <<<
+          launch_configs.blocks_per_grid,
+          launch_configs.threads_per_block,
+          launch_configs.dynamic_shared_memory_size
+          >>> (parameters...);
+    }
+  } 
+  
+  // Perform a NORMAL cuda kernel launch
+  else {
+    kernel_function <<<
+          launch_configs.blocks_per_grid,
+          launch_configs.threads_per_block,
+          launch_configs.dynamic_shared_memory_size
+          >>> (parameters...);
+  }
+}
+
 namespace profile {
 
 // used to signal from the compute thread to the sampling thread
