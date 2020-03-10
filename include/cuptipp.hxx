@@ -4,41 +4,40 @@
 #include <cstddef>
 #include <stdio.h>
 
-
 #ifdef _WIN32
-    #ifndef WIN32_LEAN_AND_MEAN
-        #define WIN32_LEAN_AND_MEAN
-    #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #endif
 
 // CUDA Profiling Tools Interface (CUPTI)
-#include <cupti.h>
 #include <cuda_runtime_api.h>
+#include <cupti.h>
 
 #ifdef _WIN32
-	#include <windows.h>
+#include <windows.h>
 #else
-	#include <unistd.h>
-	#include <pthread.h>
+#include <unistd.h>
+#include <pthread.h>
 #endif
 
-#define CHECK_CU_ERROR(err, cufunc)                                     \
-  if (err != CUDA_SUCCESS)                                              \
-    {                                                                   \
-      printf ("Error %d for CUDA Driver API function '%s'.\n",          \
-              err, cufunc);                                             \
-      return 0;                                                         \
-    }
+#define CHECK_CU_ERROR(err, cufunc)                                            \
+  if (err != CUDA_SUCCESS) {                                                   \
+    printf("Error %d for CUDA Driver API function '%s'.\n", err, cufunc);      \
+    return 0;                                                                  \
+  }
 
-#define CHECK_CUPTI_ERROR(err, cuptifunc)                               \
-  if (err != CUPTI_SUCCESS)                                             \
-    {                                                                   \
-      const char *errstr;                                               \
-      cuptiGetResultString(err, &errstr);                               \
-      printf ("%s:%d:Error %s for CUPTI API function '%s'.\n",          \
-              __FILE__, __LINE__, errstr, cuptifunc);                   \
-      return 0;                                                         \
-    }
+#define CHECK_CUPTI_ERROR(err, cuptifunc)                                      \
+  if (err != CUPTI_SUCCESS) {                                                  \
+    const char* errstr;                                                        \
+    cuptiGetResultString(err, &errstr);                                        \
+    printf("%s:%d:Error %s for CUPTI API function '%s'.\n",                    \
+           __FILE__,                                                           \
+           __LINE__,                                                           \
+           errstr,                                                             \
+           cuptifunc);                                                         \
+    return 0;                                                                  \
+  }
 
 #define EVENT_NAME "l2_subp0_read_sector_misses"
 #define SAMPLE_PERIOD_MS 50
@@ -46,39 +45,41 @@
 
 namespace cuptipp {
 
-enum LaunchT {
+enum LaunchT
+{
   PROFILED,
   NORMAL
 };
 
-typedef struct {
+typedef struct
+{
   dim3 blocks_per_grid;
   dim3 threads_per_block;
   size_t dynamic_shared_memory_size;
 } ConfigsT;
 
 template<LaunchT L, typename KernelT, typename... ParametersT>
-inline void launch(
-	const KernelT& kernel_function, ConfigsT launch_configs, ParametersT... parameters)
+inline void
+launch(const KernelT& kernel_function,
+       ConfigsT launch_configs,
+       ParametersT... parameters)
 {
   // Perform a PROFILED cuptipp::launch
   if (L == LaunchT::PROFILED) {
     for (int i = 0; i < ITERATIONS; i++) {
-    kernel_function <<<
-          launch_configs.blocks_per_grid,
-          launch_configs.threads_per_block,
-          launch_configs.dynamic_shared_memory_size
-          >>> (parameters...);
+      kernel_function<<<launch_configs.blocks_per_grid,
+                        launch_configs.threads_per_block,
+                        launch_configs.dynamic_shared_memory_size>>>(
+        parameters...);
     }
-  } 
-  
+  }
+
   // Perform a NORMAL cuda kernel launch
   else {
-    kernel_function <<<
-          launch_configs.blocks_per_grid,
-          launch_configs.threads_per_block,
-          launch_configs.dynamic_shared_memory_size
-          >>> (parameters...);
+    kernel_function<<<launch_configs.blocks_per_grid,
+                      launch_configs.threads_per_block,
+                      launch_configs.dynamic_shared_memory_size>>>(
+      parameters...);
   }
 }
 
@@ -89,10 +90,11 @@ static volatile int testComplete = 0;
 
 static CUcontext context;
 static CUdevice device;
-static const char *eventName;
+static const char* eventName;
 
 template<typename T>
-T* sample(void *arg)
+T*
+sample(void* arg)
 {
   eventName = EVENT_NAME;
   CUptiResult cuptiErr;
@@ -103,8 +105,8 @@ T* sample(void *arg)
   uint64_t *eventValues = NULL, eventVal = 0;
   uint32_t profile_all = 1;
 
-  cuptiErr = cuptiSetEventCollectionMode(context,
-                                         CUPTI_EVENT_COLLECTION_MODE_CONTINUOUS);
+  cuptiErr = cuptiSetEventCollectionMode(
+    context, CUPTI_EVENT_COLLECTION_MODE_CONTINUOUS);
   CHECK_CUPTI_ERROR(cuptiErr, "cuptiSetEventCollectionMode");
 
   cuptiErr = cuptiEventGroupCreate(context, &eventGroup, 0);
@@ -116,9 +118,11 @@ T* sample(void *arg)
   cuptiErr = cuptiEventGroupAddEvent(eventGroup, eventId);
   CHECK_CUPTI_ERROR(cuptiErr, "cuptiEventGroupAddEvent");
 
-  cuptiErr = cuptiEventGroupSetAttribute(eventGroup,
-                                         CUPTI_EVENT_GROUP_ATTR_PROFILE_ALL_DOMAIN_INSTANCES,
-                                         sizeof(profile_all), &profile_all);
+  cuptiErr = cuptiEventGroupSetAttribute(
+    eventGroup,
+    CUPTI_EVENT_GROUP_ATTR_PROFILE_ALL_DOMAIN_INSTANCES,
+    sizeof(profile_all),
+    &profile_all);
   CHECK_CUPTI_ERROR(cuptiErr, "cuptiEventGroupSetAttribute");
 
   cuptiErr = cuptiEventGroupEnable(eventGroup);
@@ -127,20 +131,20 @@ T* sample(void *arg)
   valueSize = sizeof(numInstances);
   cuptiErr = cuptiEventGroupGetAttribute(eventGroup,
                                          CUPTI_EVENT_GROUP_ATTR_INSTANCE_COUNT,
-                                         &valueSize, &numInstances);
+                                         &valueSize,
+                                         &numInstances);
   CHECK_CUPTI_ERROR(cuptiErr, "cuptiEventGroupGetAttribute");
 
   bytesRead = sizeof(uint64_t) * numInstances;
-  eventValues = (uint64_t *) malloc(bytesRead);
+  eventValues = (uint64_t*)malloc(bytesRead);
   if (eventValues == NULL) {
-      printf("%s:%d: Failed to allocate memory.\n", __FILE__, __LINE__);
-      exit(-1);
+    printf("%s:%d: Failed to allocate memory.\n", __FILE__, __LINE__);
+    exit(-1);
   }
 
   while (!testComplete) {
-    cuptiErr = cuptiEventGroupReadEvent(eventGroup,
-                                        CUPTI_EVENT_READ_FLAG_NONE,
-                                        eventId, &bytesRead, eventValues);
+    cuptiErr = cuptiEventGroupReadEvent(
+      eventGroup, CUPTI_EVENT_READ_FLAG_NONE, eventId, &bytesRead, eventValues);
     CHECK_CUPTI_ERROR(cuptiErr, "cuptiEventGroupReadEvent");
     if (bytesRead != (sizeof(uint64_t) * numInstances)) {
       printf("Failed to read value for \"%s\"\n", eventName);
@@ -169,15 +173,15 @@ T* sample(void *arg)
 }
 
 template<typename ThreadT, typename ContextT, typename DeviceT>
-void begin(ThreadT *t, ContextT ctx, DeviceT dev)
+void
+begin(ThreadT* t, ContextT ctx, DeviceT dev)
 {
-	testComplete = 0;
+  testComplete = 0;
   context = ctx;
   device = dev;
 
 #ifdef _WIN32
-  *t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) sample,
-                         NULL, 0, NULL );
+  *t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)sample, NULL, 0, NULL);
   if (!(*t)) {
     printf("CreateThread failed\n");
     exit(-1);
@@ -193,15 +197,15 @@ void begin(ThreadT *t, ContextT ctx, DeviceT dev)
 }
 
 template<typename ThreadT>
-void begin(ThreadT *t)
+void
+begin(ThreadT* t)
 {
-	testComplete = 0;
+  testComplete = 0;
   cudaGetDevice(&device);
   cuCtxCreate(&context, 0, device);
-  
+
 #ifdef _WIN32
-  *t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) sample,
-                         NULL, 0, NULL );
+  *t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)sample, NULL, 0, NULL);
   if (!(*t)) {
     printf("CreateThread failed\n");
     exit(-1);
@@ -217,7 +221,8 @@ void begin(ThreadT *t)
 }
 
 template<typename ThreadT>
-void end(ThreadT *t)
+void
+end(ThreadT* t)
 {
   // "signal" the sampling thread to exit and wait for it
   testComplete = 1;
