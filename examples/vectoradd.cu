@@ -30,6 +30,11 @@ main(int argc, char* argv[])
   thrust::device_vector<int> b = B;
   thrust::device_vector<int> c(N);
 
+  int device = 0;
+  std::vector<std::string> all_events = cuptipp::available_events(device);
+  for (const auto e: all_events)
+    std::cout << e << '\n';
+
   pthread_t thread;
   cuptipp::profile::begin<pthread_t>(&thread);
 
