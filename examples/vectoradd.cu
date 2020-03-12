@@ -32,23 +32,23 @@ main(int argc, char* argv[])
 
   int device = 0;
   std::vector<std::string> all_events = cuptipp::available_events(device);
-  for (const auto e: all_events)
+  for (const auto e : all_events)
     std::cout << e << '\n';
 
-  pthread_t thread;
-  cuptipp::profile::begin<pthread_t>(&thread);
+  cuptipp::thread_t* thread = cuptipp::profile::begin<cuptipp::thread_t>();
 
   int blockDim = 128;
   int gridDim = (N + blockDim - 1) / blockDim;
 
-  cuptipp::launch<cuptipp::LaunchT::PROFILED>(vectorAdd,
-                                              { gridDim, blockDim },
-                                              N,
-                                              a.data().get(),
-                                              b.data().get(),
-                                              c.data().get());
+  cuptipp::launch(cuptipp::launch::launch_t::PROFILED,
+                  vectorAdd,
+                  { gridDim, blockDim },
+                  N,
+                  a.data().get(),
+                  b.data().get(),
+                  c.data().get());
 
-  cuptipp::profile::end<pthread_t>(&thread);
+  cuptipp::profile::end<cuptipp::thread_t>(thread);
 
   int errors = 0;
   for (int i = 0; i < N; i++) {
