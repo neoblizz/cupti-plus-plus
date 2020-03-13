@@ -26,39 +26,30 @@
 #endif
 
 #define CU_ERROR(error)                                                        \
-  do {                                                                         \
-    CUresult err = error;                                                      \
-    if (error != CUDA_SUCCESS) {                                               \
-      const char* errstr;                                                      \
-      cuGetErrorString(err, &errstr);                                          \
-      fprintf(stderr, "Error: %s %s %d\n", errstr, __FILE__, __LINE__);        \
-      if (true)                                                                \
-        exit(err);                                                             \
-    }                                                                          \
-  } while (0)
+  if (error != CUDA_SUCCESS) {                                                 \
+    const char* errstr;                                                        \
+    cuGetErrorString(error, &errstr);                                          \
+    fprintf(stderr, "Error: %s %s %d\n", errstr, __FILE__, __LINE__);          \
+    if (true)                                                                  \
+      exit(error);                                                             \
+  }
 
 #define CUDA_ERROR(error)                                                      \
-  do {                                                                         \
-    cudaError_t err = error;                                                   \
-    if (error != cudaSuccess) {                                                \
-      const char* errstr = cudaGetErrorString(err);                            \
-      fprintf(stderr, "Error: %s %s %d\n", errstr, __FILE__, __LINE__);        \
-      if (true)                                                                \
-        exit(err);                                                             \
-    }                                                                          \
-  } while (0)
+  if (error != cudaSuccess) {                                                  \
+    const char* errstr = cudaGetErrorString(error);                            \
+    fprintf(stderr, "Error: %s %s %d\n", errstr, __FILE__, __LINE__);          \
+    if (true)                                                                  \
+      exit(error);                                                             \
+  }
 
 #define CUPTI_ERROR(error)                                                     \
-  do {                                                                         \
-    CUptiResult err = error;                                                   \
-    if (error != CUPTI_SUCCESS) {                                              \
-      const char* errstr;                                                      \
-      cuptiGetResultString(error, &errstr);                                    \
-      fprintf(stderr, "Error: %s %s %d\n", errstr, __FILE__, __LINE__);        \
-      if (true)                                                                \
-        exit(err);                                                             \
-    }                                                                          \
-  } while (0)
+  if (error != CUPTI_SUCCESS) {                                                \
+    const char* errstr;                                                        \
+    cuptiGetResultString(error, &errstr);                                      \
+    fprintf(stderr, "Error: %s %s %d\n", errstr, __FILE__, __LINE__);          \
+    if (true)                                                                  \
+      exit(error);                                                             \
+  }
 
 // TODO: Required for pthread execution, as it needs to return something and
 // can't exit with an error. Once callback is added, this can be removed since
@@ -84,13 +75,21 @@ typedef HANDLE thread_t;
 typedef pthread_t thread_t;
 #endif
 
-#ifndef CUPTIPP_PROFILER_NAME_SHORT
-#define CUPTIPP_PROFILER_NAME_SHORT 64
-#endif
+#define NAME_SHORT 64
+#define NAME_LONG 128
+
+#define DESC_SHORT 512
+#define DESC_LONG 2048
+#define CATEGORY_LENGTH sizeof(CUpti_EventCategory)
 
 typedef CUpti_EventDomainID event_domain_id_t;
 typedef CUpti_EventID event_id_t;
 typedef CUpti_EventGroup event_group_t;
+typedef std::string event_name_t;
+typedef std::string event_short_desc_t;
+typedef std::string event_long_desc_t;
+typedef CUpti_EventCategory event_category_t;
+
 typedef CUdevice device_t;
 typedef CUcontext context_t;
 
@@ -140,11 +139,15 @@ typedef struct
 {
   event_group_t event_group;
   event_id_t event_id;
+  event_name_t event_name;
+  event_short_desc_t event_short_desc;
+  event_long_desc_t event_long_desc;
+  event_category_t event_category;
 } event_t;
 
 typedef struct
 {
-  event_t* eventData;
+  event_t event_data;
   uint64_t event_value;
 } trace_t;
 
@@ -159,10 +162,10 @@ null_terminator(char* str, size_t len, size_t max_len)
   }
 }
 
-std::vector<std::string>
+std::vector<trace_t>
 available_events(device_t device)
 {
-  std::vector<std::string> event_names;
+  std::vector<trace_t> traces;
 
   uint32_t num_domains = 0;
   uint32_t num_events = 0;
@@ -173,8 +176,6 @@ available_events(device_t device)
   cuptipp::event_domain_id_t* domain_ids;
   cuptipp::event_id_t* event_ids;
   size_t event_size;
-
-  char event_name[CUPTIPP_PROFILER_NAME_SHORT];
 
   CUPTI_ERROR(cuptiDeviceGetNumEventDomains(device, &num_domains));
   size = sizeof(cuptipp::event_domain_id_t) * num_domains;
@@ -210,18 +211,59 @@ available_events(device_t device)
     total_events += num_events;
   }
 
+  // Fetch and populate the trace information
+  trace_t new_trace;
+  char event_name[NAME_SHORT];
+  char event_short_d[DESC_SHORT];
+  char event_long_d[DESC_LONG];
+
   for (int i = 0; i < total_events; i++) {
-    size = CUPTIPP_PROFILER_NAME_SHORT;
+    size = NAME_SHORT;
     CUPTI_ERROR(cuptiEventGetAttribute(
       event_ids[i], CUPTI_EVENT_ATTR_NAME, &size, (uint8_t*)event_name));
-    null_terminator(event_name, size, CUPTIPP_PROFILER_NAME_SHORT);
-    event_names.push_back(event_name);
+    null_terminator(event_name, size, NAME_SHORT);
+
+    size = DESC_SHORT;
+    CUPTI_ERROR(cuptiEventGetAttribute(event_ids[i],
+                                       CUPTI_EVENT_ATTR_SHORT_DESCRIPTION,
+                                       &size,
+                                       (uint8_t*)event_short_d));
+    null_terminator(event_short_d, size, DESC_SHORT);
+
+    size = DESC_LONG;
+    CUPTI_ERROR(cuptiEventGetAttribute(event_ids[i],
+                                       CUPTI_EVENT_ATTR_LONG_DESCRIPTION,
+                                       &size,
+                                       (uint8_t*)event_long_d));
+    null_terminator(event_long_d, size, DESC_LONG);
+
+    size = CATEGORY_LENGTH;
+    CUPTI_ERROR(cuptiEventGetAttribute(event_ids[i],
+                                       CUPTI_EVENT_ATTR_CATEGORY,
+                                       &size,
+                                       (&new_trace.event_data.event_category)));
+
+    new_trace.event_data.event_id = event_ids[i];
+    new_trace.event_data.event_name = event_name;
+    new_trace.event_data.event_short_desc = event_short_d;
+    new_trace.event_data.event_long_desc = event_long_d;
+    traces.push_back(new_trace);
+  }
+
+  {
+    for (const auto e : traces) {
+      std::cout << e.event_data.event_id << ' ';
+      std::cout << e.event_data.event_name << '\n';
+      std::cout << e.event_data.event_short_desc << '\n';
+      std::cout << e.event_data.event_long_desc << '\n';
+      std::cout << e.event_data.event_category << '\n';
+    }
   }
 
   delete[] domain_ids;
   delete[] event_ids;
 
-  return std::move(event_names);
+  return std::move(traces);
 }
 
 namespace profile {
