@@ -539,7 +539,7 @@ struct profile
         kernel_function<<<launch_configs.blocks_per_grid,
                           launch_configs.threads_per_block,
                           launch_configs.dynamic_shared_memory_size,
-                          launch.configs.stream>>>(
+                          launch_configs.stream>>>(
           parameters...);
       }
     }
@@ -549,7 +549,7 @@ struct profile
       kernel_function<<<launch_configs.blocks_per_grid,
                         launch_configs.threads_per_block,
                         launch_configs.dynamic_shared_memory_size,
-                        launch.configs.stream>>>(
+                        launch_configs.stream>>>(
         parameters...);
     }
   }
