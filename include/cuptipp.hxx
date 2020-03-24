@@ -306,11 +306,11 @@ void CUPTIAPI get_event_value(void *user_data, call_back_domain_t cb_domain,
   const char *current_kernel_name = cb_info->symbolName;
 
   // XXX: Skip execution if kernel name is NULL string
-  if(!current_kernel_name) {
+  if (!current_kernel_name) {
     std::cout << "Kernel symbol is a NULL string.";
     return;
-  } 
-  
+  }
+
   // else {
   //   std::cout << "Kernel Symbol: " << current_kernel_name << "\n";
   // }
@@ -375,84 +375,80 @@ void CUPTIAPI get_event_value(void *user_data, call_back_domain_t cb_domain,
     for (int i = 0; i < pass_data.event_groups->numEventGroups; i++) {
       event_group_t group = pass_data.event_groups->eventGroups[i];
       event_domain_id_t group_domain;
-      uint32_t numEvents, numInstances, numTotalInstances;
-      event_id_t *eventIds;
-      size_t groupDomainSize = sizeof(group_domain);
-      size_t numEventsSize = sizeof(numEvents);
-      size_t numInstancesSize = sizeof(numInstances);
-      size_t numTotalInstancesSize = sizeof(numTotalInstances);
-      event_value_t *values, normalized, sum;
-      size_t valuesSize, eventIdsSize;
+      uint32_t num_events, num_instances, num_total_instances;
+      size_t group_domain_size = sizeof(group_domain);
+      size_t num_events_size = sizeof(num_events);
+      size_t num_instances_size = sizeof(num_instances);
+      size_t num_total_instances_size = sizeof(num_total_instances);
 
       CUPTI_ERROR(cuptiEventGroupGetAttribute(
-          group, CUPTI_EVENT_GROUP_ATTR_EVENT_DOMAIN_ID, &groupDomainSize,
+          group, CUPTI_EVENT_GROUP_ATTR_EVENT_DOMAIN_ID, &group_domain_size,
           &group_domain));
       CUPTI_ERROR(cuptiDeviceGetEventDomainAttribute(
           current_kernel.device, group_domain,
-          CUPTI_EVENT_DOMAIN_ATTR_TOTAL_INSTANCE_COUNT, &numTotalInstancesSize,
-          &numTotalInstances));
+          CUPTI_EVENT_DOMAIN_ATTR_TOTAL_INSTANCE_COUNT,
+          &num_total_instances_size, &num_total_instances));
       CUPTI_ERROR(cuptiEventGroupGetAttribute(
-          group, CUPTI_EVENT_GROUP_ATTR_INSTANCE_COUNT, &numInstancesSize,
-          &numInstances));
+          group, CUPTI_EVENT_GROUP_ATTR_INSTANCE_COUNT, &num_instances_size,
+          &num_instances));
       CUPTI_ERROR(cuptiEventGroupGetAttribute(group,
                                               CUPTI_EVENT_GROUP_ATTR_NUM_EVENTS,
-                                              &numEventsSize, &numEvents));
-      eventIdsSize = numEvents * sizeof(event_id_t);
-      eventIds = (event_id_t *)malloc(eventIdsSize);
+                                              &num_events_size, &num_events));
+
+      size_t event_ids_size = num_events * sizeof(event_id_t);
+      event_id_t *event_ids = new event_id_t[event_ids_size];
       CUPTI_ERROR(cuptiEventGroupGetAttribute(
-          group, CUPTI_EVENT_GROUP_ATTR_EVENTS, &eventIdsSize, eventIds));
+          group, CUPTI_EVENT_GROUP_ATTR_EVENTS, &event_ids_size, event_ids));
 
-      valuesSize = sizeof(event_value_t) * numInstances;
-      values = (event_value_t *)malloc(valuesSize);
+      size_t value_size = sizeof(event_value_t) * num_instances;
+      event_value_t *values = new event_value_t[value_size];
 
-      for (int j = 0; j < numEvents; j++) {
+      for (int j = 0; j < num_events; j++) {
         CUPTI_ERROR(cuptiEventGroupReadEvent(group, CUPTI_EVENT_READ_FLAG_NONE,
-                                             eventIds[j], &valuesSize, values));
-        /*if (metric_data->eventIdx >= metric_data->numEvents) {
-          fprintf(stderr, "[error]: Too many events collected, metric expects
-        only %d\n", (int)metric_data->numEvents); exit(-1);
-        }*/
-
+                                             event_ids[j], &value_size,
+                                             values));
+                                             
         // sum collect event values from all instances
-        sum = 0;
-        for (int k = 0; k < numInstances; k++)
+        event_value_t sum = 0;
+        for (int k = 0; k < num_instances; k++)
           sum += values[k];
 
         // normalize the event value to represent the total number of
         // domain instances on the device
-        normalized = (sum * numTotalInstances) / numInstances;
+        event_value_t normalized = (sum * num_total_instances) / num_instances;
 
-        pass_data.event_ids.push_back(eventIds[j]);
+        pass_data.event_ids.push_back(event_ids[j]);
         pass_data.event_values.push_back(normalized);
 
         // print collected value
         {
-          char eventName[NAME_LONG];
-          size_t eventNameSize = sizeof(eventName) - 1;
-          CUPTI_ERROR(cuptiEventGetAttribute(eventIds[j], CUPTI_EVENT_ATTR_NAME,
-                                             &eventNameSize, eventName));
-          eventName[NAME_LONG - 1] = '\0';
-          if (numInstances > 1) {
-            for (int k = 0; k < numInstances; k++) {
+          char event_name[NAME_LONG];
+          size_t event_name_size = sizeof(event_name) - 1;
+          CUPTI_ERROR(cuptiEventGetAttribute(event_ids[j],
+                                             CUPTI_EVENT_ATTR_NAME,
+                                             &event_name_size, event_name));
+
+          event_name[NAME_LONG - 1] = '\0';
+          if (num_instances > 1) {
+            for (int k = 0; k < num_instances; k++) {
               std::cout << values[k] << ", ";
             }
           }
           std::cout << "\n";
-          std::cout << "\t" << eventName << " (normalized) (" << sum << " * "
-                    << numTotalInstances << ") / " << numInstances << " = "
+          std::cout << "\t" << event_ids[j] << " (normalized) (" << sum << " * "
+                    << num_total_instances << ") / " << num_instances << " = "
                     << normalized << "\n";
         }
-
-        free(values);
-        free(eventIds);
       }
-
-      for (int i = 0; i < pass_data.event_groups->numEventGroups; i++) {
-        CUPTI_ERROR(
-            cuptiEventGroupDisable(pass_data.event_groups->eventGroups[i]));
-      }
-      ++(*kernel_data)[current_kernel_name].current_pass;
+      delete[] values;
+      delete[] event_ids;
     }
+
+    for (int i = 0; i < pass_data.event_groups->numEventGroups; i++) {
+      CUPTI_ERROR(
+          cuptiEventGroupDisable(pass_data.event_groups->eventGroups[i]));
+    }
+    ++(*kernel_data)[current_kernel_name].current_pass;
   }
 }
 #endif
@@ -472,10 +468,8 @@ struct profile {
   using iteration_t = cuptipp::iteration_t;
 
   profile(const std::vector<event_name_t> &event_names)
-      : 
-      p_event_names(event_names), 
-      p_num_events(event_names.size()),
-      p_event_passes(0) {
+      : p_event_names(event_names), p_num_events(event_names.size()),
+        p_event_passes(0) {
     CUDA_ERROR(cudaGetDevice(&p_device));
     CU_ERROR(cuCtxCreate(&p_context, 0, p_device));
 
