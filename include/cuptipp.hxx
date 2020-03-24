@@ -94,6 +94,7 @@ typedef struct
   dim3 blocks_per_grid;
   dim3 threads_per_block;
   size_t dynamic_shared_memory_size;
+  cudaStream_t stream;
 } kernel_configs_t;
 
 enum launch_t
@@ -537,7 +538,8 @@ struct profile
       for (int i = 0; i < NUM_RUNS; i++) {
         kernel_function<<<launch_configs.blocks_per_grid,
                           launch_configs.threads_per_block,
-                          launch_configs.dynamic_shared_memory_size>>>(
+                          launch_configs.dynamic_shared_memory_size,
+                          launch.configs.stream>>>(
           parameters...);
       }
     }
@@ -546,7 +548,8 @@ struct profile
     else {
       kernel_function<<<launch_configs.blocks_per_grid,
                         launch_configs.threads_per_block,
-                        launch_configs.dynamic_shared_memory_size>>>(
+                        launch_configs.dynamic_shared_memory_size,
+                        launch.configs.stream>>>(
         parameters...);
     }
   }
