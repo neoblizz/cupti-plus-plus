@@ -75,7 +75,7 @@ main(int argc, char* argv[])
   std::vector<cuptipp::event_value_t> event_values =
     profiler.get_event_values(kernel_names[0].c_str());
   for (int i = 0; i < event_values.size(); i++) {
-    std::cout << "\t" << events[i] << ":\t" << event_values[i] << '\n';
+    std::cout << "\t" << events[i] << ":\t" << event_values[i] << "\n";
   }
 
   /*
